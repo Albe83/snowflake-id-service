@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 1
-current_phase_name: Generator Core & Service Foundation
+current_phase: 01
+current_phase_name: generator-core-service-foundation
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-07-26T17:53:56.778Z"
+last_updated: "2026-07-26T18:07:52.730Z"
 last_activity: 2026-07-26
-last_activity_desc: Roadmap created (3 phases, 12/12 v1 requirements mapped)
+last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 1
   completed_phases: 0
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-26)
 
 **Core value:** Generare ID globalmente univoci in modo affidabile da qualsiasi istanza, senza coordinamento — se questo fallisce (ID duplicati), tutto il resto non ha valore.
-**Current focus:** Phase 1 — Generator Core & Service Foundation
+**Current focus:** Phase 01 — generator-core-service-foundation
 
 ## Current Position
 
-Phase: 1 of 3 (Generator Core & Service Foundation)
-Plan: 0 of ? in current phase
-Status: Ready to execute
-Last activity: 2026-07-26 — Roadmap created (3 phases, 12/12 v1 requirements mapped)
+Phase: 01 (generator-core-service-foundation) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 01
+Last activity: 2026-07-26 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
