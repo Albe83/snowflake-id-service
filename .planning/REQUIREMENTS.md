@@ -66,24 +66,24 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GEN-01 | TBD | Pending |
-| GEN-02 | TBD | Pending |
-| GEN-03 | TBD | Pending |
-| GEN-04 | TBD | Pending |
-| GEN-05 | TBD | Pending |
-| OPS-01 | TBD | Pending |
-| OPS-02 | TBD | Pending |
-| OPS-03 | TBD | Pending |
-| OPS-04 | TBD | Pending |
-| OPS-05 | TBD | Pending |
-| OPS-06 | TBD | Pending |
-| CONF-01 | TBD | Pending |
+| GEN-01 | Phase 2 | Pending |
+| GEN-02 | Phase 2 | Pending |
+| GEN-03 | Phase 1 | Pending |
+| GEN-04 | Phase 2 | Pending |
+| GEN-05 | Phase 3 | Pending |
+| OPS-01 | Phase 2 | Pending |
+| OPS-02 | Phase 2 | Pending |
+| OPS-03 | Phase 2 | Pending |
+| OPS-04 | Phase 3 | Pending |
+| OPS-05 | Phase 1 | Pending |
+| OPS-06 | Phase 2 | Pending |
+| CONF-01 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 12 total
-- Mapped to phases: 0
-- Unmapped: 12 ⚠️ (da mappare in roadmap)
+- Mapped to phases: 12
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-26*
-*Last updated: 2026-07-26 after initial definition*
+*Last updated: 2026-07-26 after roadmap creation (traceability mapped)*
