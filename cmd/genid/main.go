@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Albe83/snowflake-id-service/internal/idgen"
+	"github.com/Albe83/id-service/internal/idgen"
 )
 
 func main() {

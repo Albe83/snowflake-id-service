@@ -70,4 +70,4 @@ Di default, Sonyflake usa i **16 bit bassi dell'IP privato** della macchina. Su 
 
 ## Rilevanza per il progetto
 
-Sonyflake dimostra che il layout Snowflake **non è l'unica allocazione possibile**. Il trade-off tra numero di nodi e throughput è flessibile. Per il nostro caso d'uso (volumi bassi, pochi nodi, precisione ms), il layout classico 41/10/12 è più adatto. Sonyflake sacrificherebbe troppo throughput (25600 ID/s) per guadagni che non ci servono (65536 nodi).
+Sonyflake dimostra che il layout Snowflake **non è l'unica allocazione possibile**. Il trade-off tra numero di nodi e throughput è flessibile. Il progetto ha adottato UUIDv7 (MADR 0003) che non è vincolato a nessun layout Snowflake-derivato: 48 bit timestamp + 74 bit random, senza node ID né sequence.

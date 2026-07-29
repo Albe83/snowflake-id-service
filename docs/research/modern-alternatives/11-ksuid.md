@@ -81,4 +81,4 @@ In produzione da anni in Segment (ora Twilio). Trilioni di KSUID generati nei si
 
 ## Rilevanza per il progetto
 
-KSUID è l'alternativa più **robusta** in assoluto al problema degli ID distribuiti, ma il trade-off dimensionale (20 byte vs 8 byte) lo rende inadatto al nostro caso d'uso di primary key database. Rimane il **gold standard** per sistemi dove la dimensione non è critica.
+KSUID è l'alternativa più **robusta** in assoluto al problema degli ID distribuiti. Il progetto ha adottato UUIDv7 a 128 bit (MADR 0003) accettando il trade-off dimensionale in favore di robustezza e standardizzazione. KSUID rimane il **gold standard** per sistemi dove la dimensione non è critica.

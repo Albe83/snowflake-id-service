@@ -57,10 +57,10 @@ Il trend 2017-2024 è verso soluzioni che:
 
 **Nessuna alternativa "sostituisce" Snowflake in modo universale.** Ogni sistema fa trade-off diversi:
 
-- **Se la dimensione è il vincolo primario (come nel nostro caso): Snowflake rimane il migliore a 64 bit**
+- **Snowflake a 64 bit**: scelta storica quando lo storage è il vincolo primario e il numero di generatori è noto e limitato
 - Se il clock skew è il rischio primario: UUIDv7 o ULID sono superiori
 - Se serve zero configurazione e massima robustezza: KSUID è il gold standard
 - Se serve uno standard IETF: UUIDv7 è l'unica scelta
 - Se servono più nodi ma meno throughput: Sonyflake
 
-Per il nostro progetto (64 bit, volumi bassi, K8s controllato), Snowflake rimane la scelta ottimale. Il costo del passaggio a 128+ bit (storage, indici, compatibilità DB) non è giustificato dai benefici (clock skew immunity, zero config) in un ambiente dove il clock è affidabile e il node ID è gestito dal StatefulSet.
+Il progetto ha adottato UUIDv7 a 128 bit conforme a RFC 9562 (MADR 0003): zero configurazione, nessun nodo ID, clock skew innocuo, standard IETF. Il costo di storage (16 vs 8 byte) è stato considerato trascurabile rispetto ai guadagni in robustezza e semplicità operativa.

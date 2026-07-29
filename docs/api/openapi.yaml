@@ -1,7 +1,7 @@
 openapi: "3.1.0"
 
 info:
-  title: Snowflake ID Service
+  title: ID Service
   version: "0.1.0"
   description: >
     REST microservice for generating 128-bit UUIDv7 IDs

@@ -67,8 +67,8 @@ L'IETF ha aggiornato lo standard UUID dopo 20 anni (RFC 4122 era del 2005). Ha a
 
 ## Rilevanza per il Nostro Progetto
 
-- UUIDv7 è il competitor standard più diretto di Snowflake
-- La scelta di **64 bit vs 128 bit** è il trade-off principale
-- Per un sistema a **volumi bassi e numero di nodi contenuto** (come il nostro), i limiti di Snowflake (1024 macchine, 4096 ID/ms) non sono un problema reale
-- L'IETF ha scelto un approccio probabilistico (74 bit casuali) per **eliminare la complessità di configurazione del node ID**, non perché Snowflake sia tecnicamente inferiore
-- Snowflake rimane superiore quando lo spazio di storage è critico e il numero di generatori è noto e limitato
+- UUIDv7 è il competitor standard più diretto dell'approccio a 64 bit (Snowflake-like)
+- La scelta di **64 bit vs 128 bit** è il trade-off principale analizzato dalla ricerca
+- L'IETF ha scelto un approccio probabilistico (74 bit casuali) per **eliminare la complessità di configurazione** del node ID e del sequence overflow
+- Il progetto ha adottato UUIDv7 a 128 bit conforme a RFC 9562 (MADR 0003): zero configurazione, clock skew innocuo, standard IETF
+- Il formato a 64 bit di Snowflake rimane una valida alternativa storica quando lo storage è il vincolo primario

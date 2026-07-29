@@ -104,12 +104,11 @@ Questo rende difficile l'interoperabilità tra sistemi che usano varianti divers
 
 ## Conclusione per il Nostro Progetto
 
-Per il Snowflake ID Service (framework Foundation, volumi bassi, deployment Kubernetes interno):
+Il progetto ha adottato UUIDv7 a 128 bit conforme a RFC 9562 (MADR 0003). Questa scelta elimina alla radice i problemi analizzati in questa ricerca:
 
-- **I limiti di Snowflake non sono rilevanti** per il nostro caso d'uso
-- Clock skew: gestibile con policy esplicita in un ambiente controllato (Kubernetes con NTP)
-- Sequence limit: irrilevante a volumi bassi
-- Node ID: risolto elegantemente con StatefulSet ordinal
-- 64 bit: vantaggio competitivo per storage nei database futuri
+- Clock skew: innocuo grazie ai 74 bit casuali (non serve policy esplicita)
+- Sequence limit: non esiste (nessun contatore incrementale)
+- Node ID: non necessario (casualità garantisce unicità senza identificare la macchina)
+- Standard: UUIDv7 è RFC IETF, interoperabile universalmente
 
-**Snowflake rimane la scelta corretta per il nostro contesto specifico**, ma è importante comprendere i limiti per sapere quando _non_ usarlo in futuro.
+**Il formato a 64 bit di Snowflake rimane una valida alternativa storica** quando lo storage è il vincolo primario e il numero di generatori è noto e limitato.

@@ -86,4 +86,4 @@ Totale: **16.777.216 ID unici per secondo per host/process**.
 
 ## Rilevanza per il progetto
 
-XID rappresenta un **compromesso dimensionale interessante** (12 byte) tra Snowflake (8) e UUID/KSUID (16-20). Il design lock-free è superiore per throughput. Per il nostro caso d'uso, 96 bit sono comunque più dei 64 bit richiesti.
+XID rappresenta un **compromesso dimensionale interessante** (12 byte) tra Snowflake (8) e UUID/KSUID (16-20). Il design lock-free è superiore per throughput. Il progetto ha adottato UUIDv7 a 128 bit (MADR 0003), scartando sia l'approccio a 64 bit di Snowflake che soluzioni intermedie come XID.

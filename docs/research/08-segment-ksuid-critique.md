@@ -55,4 +55,4 @@ KSUID (K-Sortable Unique IDentifier) è la soluzione di Segment:
 - KSUID dimostra che **l'ordinamento temporale non richiede un timestamp a precisione di millisecondi nell'ID**
 - Il **trade-off tra dimensione e robustezza** è il tema centrale: più bit → più resilienza, ma più storage
 - Segment ha scelto di sacrificare la compattezza (160 vs 64 bit) per eliminare il problema del clock skew e del node ID
-- Per il nostro caso d'uso (ID per database, volumi bassi), 64 bit rimangono la scelta giusta: la compattezza prevale sulla robustezza extra che non serve
+- Il progetto ha successivamente adottato 128 bit (UUIDv7 via MADR 0003), privilegiando robustezza e standardizzazione sulla compattezza

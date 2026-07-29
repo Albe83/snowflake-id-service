@@ -26,7 +26,7 @@ L'analisi delle alternative moderne (ULID, KSUID, UUIDv7) mostra un trend conver
 ## Considered Options
 
 * **64 bit Snowflake modernizzato** (ADR 0001) — monotonic anchor, hybrid sequence, node ID effimero
-* **128 bit con payload casuale** — 48 bit Unix timestamp ms + 80 bit random
+* **128 bit con payload casuale** — 48 bit Unix timestamp ms + 74 bit random (layout RFC 9562 UUIDv7)
 
 ## Decision Outcome
 
@@ -38,11 +38,11 @@ Il costo in storage (16 byte vs 8 byte) è considerato trascurabile rispetto ai 
 
 * **Good**, because algoritmo ~15 righe di Go, comprensibile in 30 secondi
 * **Good**, because zero configurazione, zero coordinamento, zero persistenza
-* **Good**, because clock skew innocuo: 74 bit random rendono il duplicato impossibile anche con clock che torna indietro
+* **Good**, because clock skew innocuo: 74 bit random rendono il duplicato probabilisticamente trascurabile anche con clock che torna indietro
 * **Good**, because restart safe senza alcuna precauzione
 * **Good**, because nessun mutex: la generazione random può avvenire fuori dal lock
 * **Good**, because timestamp Unix epoch standard (interpretabile universalmente)
-* **Good**, because infiniti ID per millisecondo (nessun sequence overflow)
+* **Good**, because 74 bit di spazio casuale per millisecondo (nessun limite di sequence o contatore)
 * **Bad**, because 16 byte di storage invece di 8
 * **Bad**, because non adatto come primary key integer nativo in database che non supportano UUID nativo
 
@@ -78,6 +78,6 @@ Verifica tramite test race-enabled:
 
 ## More Information
 
-- Design document: `docs/design/snowflake-algorithm-workflow.md`
+- Design document: `docs/design/uuidv7-generator-workflow.md`
 - Riferimento standard: RFC 9562 (UUIDv7)
 - Questo ADR sostituisce 0001 e 0002 — i miglioramenti lì descritti sono assorbiti dal design a 128 bit

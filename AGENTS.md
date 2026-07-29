@@ -1,4 +1,4 @@
-# AGENTS.md — Snowflake ID Service
+# AGENTS.md — ID Service
 
 ## Project
 

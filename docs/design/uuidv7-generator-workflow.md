@@ -1,4 +1,4 @@
-# Snowflake ID — Algorithm Workflow (128 bit)
+# UUIDv7 Generator — Algorithm Workflow (128 bit)
 
 > **Decisione:** [MADR 0003](../madr/0003-128-bit-random-payload.md) — 128 bit con payload casuale, stile UUIDv7.
 > **Modello:** UUIDv7 stateless — nessuno stato condiviso, nessun lock, nessuna persistenza.

@@ -1,7 +1,10 @@
 ---
-status: accepted
+status: superseded
 date: 2026-07-29
 decision-makers: Albe83
+superseded-by:
+  - 0002-lock-free-generator
+  - 0003-128-bit-random-payload
 ---
 
 # Monotonic Anchor + Ephemeral Node ID + Hybrid Sequence per la generazione Snowflake ID
@@ -59,6 +62,6 @@ Verifica tramite test race-enabled:
 
 ## More Information
 
-- Design document: `docs/design/snowflake-algorithm-workflow.md`
+- Design document: `docs/design/uuidv7-generator-workflow.md`
 - La sequence ibrida alloca 6 bit al contatore incrementale e 6 bit random. L'allocazione è configurabile.
 - Il node ID è derivato come `PID ⊕ (startupEpoch & 0x3FF) ⊕ rand() & 0x3FF`.

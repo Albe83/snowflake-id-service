@@ -63,4 +63,4 @@ Un intero a 64 bit composto da:
 - Clock skew innocuo per design
 
 ### Verdetto per il nostro progetto
-Snowflake ID a 64 bit è la scelta corretta per il nostro contesto (volumi bassi, deployment controllato su K8s, storage ottimizzato). I limiti noti (clock skew, sequence, node ID) sono gestibili e non rappresentano un rischio per il caso d'uso previsto.
+Il progetto ha adottato UUIDv7 a 128 bit conforme a RFC 9562 (MADR 0003), che elimina completamente i problemi di clock skew, node ID, sequence overflow e configurazione. Il costo in storage (16 vs 8 byte) è stato considerato trascurabile rispetto ai guadagni in robustezza, semplicità e interoperabilità standard.

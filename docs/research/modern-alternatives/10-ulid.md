@@ -72,4 +72,4 @@ Se vengono generati più di 2^80 ULID nello stesso millisecondo (praticamente im
 
 ## Rilevanza per il progetto
 
-ULID è l'alternativa più matura a Snowflake per chi vuole **azzerare la complessità operativa** (niente node ID, niente clock skew policy) ed è disposto a pagare il costo di 128 bit. Per il nostro caso d'uso (64 bit per storage database), Snowflake rimane superiore.
+ULID è l'alternativa più matura a Snowflake per chi vuole **azzerare la complessità operativa** (niente node ID, niente clock skew policy) ed è disposto a pagare il costo di 128 bit. Il progetto ha adottato UUIDv7 (MADR 0003) che condivide lo stesso principio di design a 128 bit con payload casuale, aggiungendo il vantaggio di uno standard IETF.
