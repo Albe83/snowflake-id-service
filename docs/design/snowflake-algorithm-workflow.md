@@ -49,19 +49,13 @@ flowchart TD
 ## Bit Layout
 
 ```mermaid
-block-beta
-    columns 4
-    SignBit["Bit 63<br>Always 0"]:1
-    Timestamp["Timestamp<br>milliseconds since epoch"]:1
-    NodeId["Node ID<br>unique per generator instance"]:1
-    Sequence["Sequence<br>per-millisecond counter"]:1
-
-    space
-    SignDesc["1 bit<br>positive signed integer"]
-    TimestampDesc["N bits<br>e.g. 41 (69 yrs @ 1ms)"]
-    NodeDesc["M bits<br>e.g. 10 (1024 nodes)"]
-    SequenceDesc["12 bits<br>4096 IDs/ms/node"]
+packet-beta
+0: "Sign (0)"
+1-41: "Timestamp (ms since epoch)"
+42-51: "Node ID"
+52-63: "Sequence (per-ms counter)"
 ```
+_Example layout: 1+41+10+12 bits, fully configurable._
 
 ## Sequence Diagram
 
