@@ -7,19 +7,20 @@ packet-beta
 0: "Sign (0)"
 1-41: "Timestamp (ms since epoch)"
 42-51: "Node ID"
-52-63: "Sequence (per-ms counter)"
+52-57: "Counter (6b)"
+58-63: "Random (6b)"
 ```
-_Example layout: 1+41+10+12 bits, fully configurable._
+_Layout: 1+41+10+12 bits. La sequence è splittata: 6 bit contatore incrementale + 6 bit random inizializzati a ogni nuovo ms._
 
 ---
 
-## Startup & Generation Flow _(monotonic anchor + ephemeral node ID)_
+## Startup & Generation Flow _(monotonic anchor + ephemeral node ID + hybrid sequence)_
 
 ```mermaid
 flowchart TD
     subgraph INIT["1. Startup / Initialization"]
         A["nodeID = derive()<br>PID ⊕ startupEpoch ⊕ rand()"]
-        A --> D["monotonicMs = now()<br>sequence = 0"]
+        A --> D["monotonicMs = now()<br>seqCounter = 0<br>seqRandom = rand()"]
     end
 
     D --> E
@@ -29,18 +30,18 @@ flowchart TD
         E --> F["ts = now()"]
 
         F --> G{"ts > monotonicMs?"}
-        G -->|Yes| H["monotonicMs = ts<br>sequence = 0"]
+        G -->|Yes| H["monotonicMs = ts<br>seqCounter = 0<br>seqRandom = rand()"]
         G -->|No| I["keep monotonicMs unchanged"]
 
-        H --> J{"sequence == mask?"}
+        H --> J{"seqCounter == counterMask?"}
         I --> J
-        J -->|Yes| K["monotonicMs++<br>sequence = 0"]
+        J -->|Yes| K["monotonicMs++<br>seqCounter = 0<br>seqRandom = rand()"]
         J -->|No| L["Build ID"]
         K --> L
 
-        L["id = (monotonicMs - epoch) ≪ timestampShift<br>| (nodeID ≪ nodeIDShift)<br>| sequence"]
+        L["sequence = seqCounter | (seqRandom ≪ randomShift)<br>id = (monotonicMs - epoch) ≪ timestampShift<br>| (nodeID ≪ nodeIDShift)<br>| sequence"]
 
-        L --> M["sequence++"]
+        L --> M["seqCounter++"]
         M --> N["🔓 Release Mutex"]
         N --> O["✅ Return id"]
     end
@@ -48,7 +49,7 @@ flowchart TD
     style O fill:#15803d,color:#fff
 ```
 
-_Nota: nessun percorso di errore per clock skew. Il node ID è effimero (cambia a ogni restart), eliminando la necessità di persistenza._
+_Note: nessun percorso di errore per clock skew. Il node ID è effimero (cambia a ogni restart). La sequence è splittata: 6 bit contatore + 6 bit random — ogni nuovo ms o overflow azzera il contatore e rigenera i bit random, rendendo gli ID non prevedibili._
 
 ## Sequence Diagram _(monotonic anchor)_
 
@@ -71,15 +72,16 @@ sequenceDiagram
     loop For each ID
         G->>Ck: now()
         Ck-->>G: ts
-        alt ts > monotonicMs
-            G->>G: monotonicMs = ts, sequence = 0
-        else ts arretrato
-            G->>G: monotonicMs invariato (skew assorbito)
+        alt ts > monotonicMs (new ms)
+            G->>G: seqCounter = 0, seqRandom = rand()
+        else same ms
+            G->>G: seqCounter++ (random invariato)
         end
-        opt sequence overflow
-            G->>G: monotonicMs++
+        opt seqCounter overflow
+            G->>G: monotonicMs++, seqCounter = 0, seqRandom = rand()
         end
-        G->>G: compose(monotonicMs, nodeID, sequence++)
+        G->>G: sequence = seqCounter | (seqRandom << 6)
+        G->>G: compose(monotonicMs, nodeID, sequence)
         G-->>S: id
     end
 
@@ -104,7 +106,7 @@ flowchart LR
     G1 --> M["🔒 sync.Mutex"]
     G2 --> M
     GN --> M
-    M --> Gen["Generator State<br>monotonicMs<br>sequence<br>nodeID<br>epoch"]
+    M --> Gen["Generator State<br>monotonicMs<br>seqCounter<br>seqRandom<br>nodeID<br>epoch"]
     Gen --> ID1["✅ id"]
     Gen --> ID2["✅ id"]
     Gen --> IDN["✅ id"]
