@@ -13,60 +13,52 @@ _Example layout: 1+41+10+12 bits, fully configurable._
 
 ---
 
-## Startup & Generation Flow
+## Startup & Generation Flow _(monotonic anchor + ephemeral node ID)_
 
 ```mermaid
 flowchart TD
     subgraph INIT["1. Startup / Initialization"]
-        A["Load Config"]
-        A --> B{"Node ID valid?"}
+        A["nodeID = derive()<br>PID ⊕ startupEpoch ⊕ rand()"]
+        A --> B{"System clock ≥ Epoch?"}
         B -->|No| C["❌ Exit(1)"]
-        B -->|Yes| D{"System clock ≥ Epoch?"}
-        D -->|No| E["❌ Exit(1)"]
-        D -->|Yes| F["Init: lastTimestamp = 0<br>sequence = 0"]
+        B -->|Yes| D["monotonicMs = now()<br>sequence = 0"]
     end
 
-    F --> G
+    D --> E
 
     subgraph GEN["2. ID Generation (NextID)"]
-        G["🔒 Acquire Mutex"]
-        G --> H["timestamp = now()"]
+        E["🔒 Acquire Mutex"]
+        E --> F["ts = now()"]
 
-        H --> I{"timestamp < lastTimestamp?"}
-        I -->|Yes| J["⚠ Clock Skew Detected"]
-        J --> K["🔓 Release Mutex"]
-        K --> L["❌ Return error (503)"]
+        F --> G{"ts > monotonicMs?"}
+        G -->|Yes| H["monotonicMs = ts<br>sequence = 0"]
+        G -->|No| I["keep monotonicMs unchanged"]
 
-        I -->|No| M{"timestamp == lastTimestamp?"}
-        M -->|Yes| N["sequence = (sequence + 1) & sequenceMask"]
-        N --> O{"sequence == 0?"}
-        O -->|Yes| P["⏳ Spin-wait: timestamp = tilNextMillis(lastTimestamp)"]
-        O -->|No| Q["Build ID"]
-        P --> Q
+        H --> J{"sequence == mask?"}
+        I --> J
+        J -->|Yes| K["monotonicMs++<br>sequence = 0"]
+        J -->|No| L["Build ID"]
+        K --> L
 
-        M -->|No| R["sequence = 0"]
-        R --> Q
+        L["id = (monotonicMs - epoch) ≪ timestampShift<br>| (nodeID ≪ nodeIDShift)<br>| sequence"]
 
-        Q["id = (timestamp - epoch) ≪ timestampShift<br>| (nodeId ≪ nodeIdShift)<br>| sequence"]
-
-        Q --> S["lastTimestamp = timestamp"]
-        S --> T["🔓 Release Mutex"]
-        T --> U["✅ Return id"]
+        L --> M["sequence++"]
+        M --> N["🔓 Release Mutex"]
+        N --> O["✅ Return id"]
     end
 
     style C fill:#b91c1c,color:#fff
-    style E fill:#b91c1c,color:#fff
-    style J fill:#d97706,color:#fff
-    style L fill:#b91c1c,color:#fff
-    style U fill:#15803d,color:#fff
+    style O fill:#15803d,color:#fff
 ```
 
-## Sequence Diagram
+_Nota: nessun percorso di errore per clock skew. Il node ID è effimero (cambia a ogni restart), eliminando la necessità di persistenza._
+
+## Sequence Diagram _(monotonic anchor)_
 
 ```mermaid
 sequenceDiagram
     participant C as Client
-    participant S as Snowflake Service
+    participant S as Service
     participant G as Generator (Mutex)
     participant Ck as System Clock
 
@@ -75,17 +67,17 @@ sequenceDiagram
 
     loop For each ID
         G->>Ck: now()
-        Ck-->>G: timestamp ms
-        alt clock went backwards
-            G-->>S: error (clock skew)
-        else clock normal
-            G->>G: shift & compose bits
-            G-->>S: id
+        Ck-->>G: ts
+        alt ts > monotonicMs
+            G->>G: monotonicMs = ts, sequence = 0
+        else ts arretrato
+            G->>G: monotonicMs invariato (skew assorbito)
         end
-        opt same ms sequence overflow
-            G->>G: spin-wait next ms
-            G-->>S: id (delayed)
+        opt sequence overflow
+            G->>G: monotonicMs++
         end
+        G->>G: compose(monotonicMs, nodeID, sequence++)
+        G-->>S: id
     end
 
     S->>G: 🔓 release
@@ -109,10 +101,10 @@ flowchart LR
     G1 --> M["🔒 sync.Mutex"]
     G2 --> M
     GN --> M
-    M --> Gen["Generator State<br>lastTimestamp<br>sequence<br>nodeId<br>epoch"]
-    Gen --> ID1["✅ id (sequential)"]
-    Gen --> ID2["✅ id (sequential)"]
-    Gen --> IDN["✅ id (sequential)"]
+    M --> Gen["Generator State<br>monotonicMs<br>sequence<br>nodeID<br>epoch"]
+    Gen --> ID1["✅ id"]
+    Gen --> ID2["✅ id"]
+    Gen --> IDN["✅ id"]
 ```
 
 ---
