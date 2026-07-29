@@ -306,15 +306,97 @@ Una cascata di derivazione stabile (K8s ordinal → IP hash → random) aggiunge
 
 **Fonti:** il trend 2017-2024 è verso ID più grandi: XID 96 bit, ULID 128 bit, KSUID 160 bit, UUIDv7 128 bit. Il trade-off dimensionale è quasi sempre favorevole ai bit extra.
 
-**Miglioramento:** considerare **almeno 96 bit** (12 byte, come XID e MongoDB ObjectID):
+#### Opzione A: 96 bit (12 byte, stile XID)
+
 - 1 bit sign + 47 bit timestamp ms (8920 anni di autonomia)
 - 24 bit node ID (16.7M istanze, derivazione automatica sicura)
 - 24 bit randomness + sequence ibrida
 
-Oppure **128 bit** (16 byte, come UUIDv7/ULID):
-- 48 bit timestamp Unix ms (standard IETF, 8900 anni)
-- 80 bit payload casuale — **elimina completamente** node ID, clock skew e sequence overflow
-- Zero configurazione, zero coordinamento, zero policy di clock skew
+#### Opzione B: 128 bit (16 byte, stile UUIDv7/ULID)
+
+Elimina completamente node ID, clock skew e sequence overflow. Il generatore si riduce a due operazioni.
+
+**Bit layout (128 bit):**
+
+```mermaid
+packet-beta
+0-47: "Unix timestamp (ms)"
+48-51: "Version (4b)"
+52-63: "Random A (12b)"
+64-65: "Variant (2b)"
+66-127: "Random B (62b)"
+```
+
+**Pseudocodice:**
+
+```go
+func NewGenerator() *Generator {
+    return &Generator{
+        monotonicMs: nowMs(),
+    }
+}
+
+func (g *Generator) NextID() ([]byte, error) {
+    g.mu.Lock()
+    ts := nowMs()
+    if ts > g.monotonicMs {
+        g.monotonicMs = ts
+    }
+    // monotonicMs non arretra mai, ma ora non è critico:
+    // anche se arretrasse, 74 bit random rendono il duplicato impossibile
+    g.mu.Unlock()
+
+    var id [16]byte
+    binary.BigEndian.PutUint48(id[0:6], g.monotonicMs)
+    cryptoRand.Read(id[6:16])
+    id[6] = (id[6] & 0x0F) | 0x70  // version 7
+    id[8] = (id[8] & 0x3F) | 0x80  // variant 10xx
+    return id[:], nil
+}
+```
+
+_Il mutex protegge solo `monotonicMs`. I 74 bit random vengono generati fuori dal lock — ogni goroutine produce random indipendente._
+
+**Cosa scompare rispetto a 64 bit:**
+
+| Componente 64 bit | Cosa succede a 128 bit |
+|---|---|
+| Node ID (10 bit) | Eliminato. 74 bit random garantiscono unicità senza identificare la macchina |
+| Sequence (12 bit) | Eliminata. 74 bit random = infiniti ID/ms senza contatore né overflow |
+| Clock skew policy | Irrilevante. Anche con clock che torna indietro, `monotonicMs` + random non collidono mai |
+| Configurazione node ID | Eliminata. Zero configurazione, zero coordinamento |
+| Persistenza cross-restart | Eliminata. Random rende impossibile il duplicato anche dopo restart con clock arretrato |
+| Spin-wait su overflow | Eliminato. Non esiste più il concetto di "sequence esaurita" |
+| Epoch custom | Unix epoch standard → ogni ID è auto-descrittivo e interoperabile |
+
+**Confronto flusso: 64 bit vs 128 bit**
+
+```mermaid
+flowchart LR
+    subgraph S64["64 bit (current)"]
+        direction TB
+        A1["derive nodeID"] --> A2["monotonicMs = now()"]
+        A2 --> A3["🔒 Mutex"]
+        A3 --> A4{"ts > monotonicMs?"}
+        A4 --> A5["seqCounter=0, seqRandom=rand()"]
+        A4 --> A6["seqCounter++"]
+        A5 --> A7{"overflow?"}
+        A6 --> A7
+        A7 --> A8["compose(timestamp, nodeID, sequence)"]
+    end
+
+    subgraph S128["128 bit"]
+        direction TB
+        B1["monotonicMs = now()"] --> B2["🔒 solo su monotonicMs"]
+        B2 --> B3["cryptoRand.Read(10 bytes)"]
+        B3 --> B4["compose(timestamp | random)"]
+    end
+
+    style A8 fill:#fbbf24,color:#000
+    style B4 fill:#15803d,color:#fff
+```
+
+**Verdetto:** a 128 bit, l'algoritmo collassa a ~15 righe di Go. I miglioramenti #1, #2, #3, #4 diventano superflui — il design a random payload li assorbe tutti. Il trade-off è solo storage: 16 byte invece di 8, che nella maggior parte dei database moderni è trascurabile (1 indice B-tree con 1 miliardo di righe: ~8 GB extra).
 
 ### 6. Epoch standard
 
