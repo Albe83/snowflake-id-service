@@ -53,13 +53,13 @@ paths:
       summary: Decode a UUIDv7 into its components
       description: >
         Extracts timestamp, version, variant, and random payload from a UUIDv7.
-        Returns 404 if the ID is not a valid UUIDv7.
+        Returns 400 if the ID is not a syntactically valid UUIDv7.
       tags: [IDs]
       parameters:
         - name: id
           in: path
           required: true
-          description: Canonical UUID string (36 chars, lowercase hex).
+          description: Canonical UUIDv7 string (36 chars, lowercase hex).
           schema:
             type: string
             pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
@@ -73,12 +73,6 @@ paths:
                 $ref: "#/components/schemas/DecodeResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
-        "404":
-          description: The specified ID is not a valid UUIDv7.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "503":
           $ref: "#/components/responses/NotReady"
 
@@ -126,15 +120,18 @@ paths:
       operationId: getMetrics
       summary: Prometheus metrics
       description: >
-        Exposes metrics in Prometheus text format.
-        Content generated via the client_golang default registry
-        (e.g. `go_goroutines`, `process_open_fds`, custom metrics).
+        Exposes metrics via promhttp.Handler.
+        Supports Prometheus exposition format and OpenMetrics
+        via content negotiation (Accept header).
       tags: [Observability]
       responses:
         "200":
-          description: Metrics in Prometheus text format.
+          description: Metrics in Prometheus or OpenMetrics format.
           content:
-            text/plain:
+            text/plain; version=0.0.4:
+              schema:
+                type: string
+            application/openmetrics-text; version=1.0.0:
               schema:
                 type: string
 
@@ -157,7 +154,7 @@ components:
 
     DecodeResponse:
       type: object
-      required: [id, timestamp_ms, timestamp_iso, version, variant, random_bytes]
+      required: [id, timestamp_ms, timestamp_iso, version, variant, random_payload]
       properties:
         id:
           type: string
@@ -167,13 +164,13 @@ components:
         timestamp_ms:
           type: integer
           format: int64
-          description: Unix timestamp in milliseconds (48-bit).
-          example: 1717500204000
+          description: Unix timestamp in milliseconds extracted from the first 48 bits.
+          example: 1714667953755
         timestamp_iso:
           type: string
           format: date-time
-          description: Timestamp in ISO 8601 format.
-          example: "2024-06-04T10:03:24.000Z"
+          description: Timestamp converted to ISO 8601 format (UTC).
+          example: "2024-05-02T16:39:13.755Z"
         version:
           type: integer
           description: UUID version (always 7 for UUIDv7).
@@ -181,13 +178,19 @@ components:
           enum: [7]
         variant:
           type: string
-          description: UUID variant in binary notation.
+          description: UUID variant in binary notation (always 10xx for UUIDv7).
           example: "10xx"
           enum: ["10xx"]
-        random_bytes:
+        random_payload:
           type: string
-          description: Random payload (74 bits) in hexadecimal.
-          example: "00008000123456789abc"
+          description: >
+            Concatenation of rand_a (12 bits) and rand_b (62 bits),
+            zero-padded to 10 bytes (20 hex chars, lowercase).
+            Version and variant bits are excluded.
+          minLength: 20
+          maxLength: 20
+          pattern: "^[0-9a-f]{20}$"
+          example: "00000000123456789abc"
 
     StatusResponse:
       type: object

@@ -62,7 +62,7 @@ sequenceDiagram
         participant R as crypto/rand
     end
 
-    C->>S: POST /v1/ids {"count": 3}
+    C->>S: POST /v1/ids?count=3
     S->>G: NextIDs(3)
 
     G->>Ck: now()
