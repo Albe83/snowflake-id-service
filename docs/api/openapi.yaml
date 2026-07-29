@@ -19,15 +19,20 @@ paths:
       summary: Genera uno o più UUIDv7
       description: >
         Genera da 1 a 1000 UUIDv7 in un'unica chiamata.
-        Se il campo `count` è omesso, viene generato un singolo ID.
+        Se il parametro `count` è omesso, viene generato un singolo ID.
         Tutti gli ID condividono lo stesso timestamp (acquisito una sola volta).
       tags: [IDs]
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/GenerateRequest"
+      parameters:
+        - name: count
+          in: query
+          required: false
+          description: Numero di ID da generare. Default 1, max 1000.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 1
+            example: 3
       responses:
         "200":
           description: Richiesta completata con successo.
@@ -135,20 +140,6 @@ paths:
 
 components:
   schemas:
-    GenerateRequest:
-      type: object
-      additionalProperties: false
-      properties:
-        count:
-          type: integer
-          minimum: 1
-          maximum: 1000
-          default: 1
-          description: Numero di ID da generare. Default 1, max 1000.
-          example: 3
-      description: >
-        Body opzionale. Se omesso o vuoto (`{}`), genera un singolo ID.
-
     GenerateResponse:
       type: object
       required: [ids]
