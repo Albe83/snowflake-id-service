@@ -1,0 +1,248 @@
+openapi: "3.1.0"
+
+info:
+  title: Snowflake ID Service
+  version: "0.1.0"
+  description: >
+    Microservizio REST per la generazione di UUIDv7 a 128 bit
+    (48 bit Unix timestamp ms + 74 bit random, RFC 9562).
+    Stateless, zero-coordination, pronto per Kubernetes.
+
+servers:
+  - url: http://localhost:8080
+    description: Locale / dev
+
+paths:
+  /v1/ids:
+    post:
+      operationId: generateIds
+      summary: Genera uno o più UUIDv7
+      description: >
+        Genera da 1 a 1000 UUIDv7 in un'unica chiamata.
+        Se il campo `count` è omesso, viene generato un singolo ID.
+        Tutti gli ID condividono lo stesso timestamp (acquisito una sola volta).
+      tags: [IDs]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateRequest"
+      responses:
+        "200":
+          description: Richiesta completata con successo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/NotReady"
+
+  /v1/ids/{id}:
+    get:
+      operationId: decodeId
+      summary: Decodifica un UUIDv7 nei suoi componenti
+      description: >
+        Estrae timestamp, versione, variante e payload casuale da un UUIDv7.
+        Restituisce 404 se l'ID non è un UUIDv7 valido.
+      tags: [IDs]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID canonico (36 caratteri, lowercase hex).
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            example: "018f3a2c-9e5b-7000-8000-123456789abc"
+      responses:
+        "200":
+          description: Decodifica completata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecodeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: L'ID specificato non è un UUIDv7 valido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/NotReady"
+
+  /healthz:
+    get:
+      operationId: healthCheck
+      summary: Liveness probe
+      description: >
+        Restituisce sempre 200 se il processo è vivo.
+        Usato da Kubernetes come liveness probe.
+      tags: [Health]
+      responses:
+        "200":
+          description: Servizio attivo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+
+  /readyz:
+    get:
+      operationId: readyCheck
+      summary: Readiness probe
+      description: >
+        Restituisce 200 se il servizio è pronto ad accettare richieste.
+        Restituisce 503 durante graceful shutdown (drain).
+        Usato da Kubernetes come readiness probe.
+      tags: [Health]
+      responses:
+        "200":
+          description: Servizio pronto.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "503":
+          description: Servizio non pronto (drain in corso).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      summary: Metriche Prometheus
+      description: >
+        Espone metriche in formato testo Prometheus.
+        Contenuto generato dal client_golang default registry
+        (es. `go_goroutines`, `process_open_fds`, metriche custom).
+      tags: [Observability]
+      responses:
+        "200":
+          description: Metriche in formato testo Prometheus.
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  schemas:
+    GenerateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        count:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 1
+          description: Numero di ID da generare. Default 1, max 1000.
+          example: 3
+      description: >
+        Body opzionale. Se omesso o vuoto (`{}`), genera un singolo ID.
+
+    GenerateResponse:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          description: Lista di UUIDv7 generati.
+          minItems: 1
+          maxItems: 1000
+          items:
+            type: string
+            format: uuid
+            pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            example: "018f3a2c-9e5b-7000-8000-123456789abc"
+
+    DecodeResponse:
+      type: object
+      required: [id, timestamp_ms, timestamp_iso, version, variant, random_bytes]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: L'UUID canonico ricevuto.
+          example: "018f3a2c-9e5b-7000-8000-123456789abc"
+        timestamp_ms:
+          type: integer
+          format: int64
+          description: Unix timestamp in millisecondi (48 bit).
+          example: 1717500204000
+        timestamp_iso:
+          type: string
+          format: date-time
+          description: Timestamp in formato ISO 8601.
+          example: "2024-06-04T10:03:24.000Z"
+        version:
+          type: integer
+          description: Versione UUID (sempre 7 per UUIDv7).
+          example: 7
+          enum: [7]
+        variant:
+          type: string
+          description: Variante UUID in notazione binaria.
+          example: "10xx"
+          enum: ["10xx"]
+        random_bytes:
+          type: string
+          description: Payload casuale (74 bit) in esadecimale.
+          example: "00008000123456789abc"
+
+    StatusResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          description: Stato del servizio.
+          example: "ok"
+          enum: ["ok"]
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Descrizione dell'errore.
+          example: "batch size must be between 1 and 1000"
+
+  responses:
+    BadRequest:
+      description: Richiesta non valida (input malformato o fuori range).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    InternalError:
+      description: Errore interno del server (es. fallimento crypto/rand).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    NotReady:
+      description: Servizio non pronto (shutdown in corso).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+tags:
+  - name: IDs
+    description: Generazione e decodifica UUIDv7
+  - name: Health
+    description: Probe di liveness e readiness
+  - name: Observability
+    description: Metriche e diagnostica
