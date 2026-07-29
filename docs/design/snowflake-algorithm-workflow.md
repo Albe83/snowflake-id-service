@@ -19,9 +19,7 @@ _Example layout: 1+41+10+12 bits, fully configurable._
 flowchart TD
     subgraph INIT["1. Startup / Initialization"]
         A["nodeID = derive()<br>PID ⊕ startupEpoch ⊕ rand()"]
-        A --> B{"System clock ≥ Epoch?"}
-        B -->|No| C["❌ Exit(1)"]
-        B -->|Yes| D["monotonicMs = now()<br>sequence = 0"]
+        A --> D["monotonicMs = now()<br>sequence = 0"]
     end
 
     D --> E
@@ -47,7 +45,6 @@ flowchart TD
         N --> O["✅ Return id"]
     end
 
-    style C fill:#b91c1c,color:#fff
     style O fill:#15803d,color:#fff
 ```
 
