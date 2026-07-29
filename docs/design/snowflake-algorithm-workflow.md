@@ -127,12 +127,93 @@ Alla luce delle ricerche condotte (Twitter Snowflake, Discord, Instagram, ULID, 
 
 **Fonti:** Twitter reference impl lancia eccezione; Segment (KSUID) e RFC 9562 (UUIDv7) lo considerano il difetto principale di Snowflake; Sonyflake eredita lo stesso problema.
 
-**Miglioramento:** sostituire `lastTimestamp` con un **contatore monotono interno** (`monotonicMs`) che:
-- Si aggiorna da `now()` solo se `now() > monotonicMs`
-- Se `now() < monotonicMs` (clock skew), continua a usare `monotonicMs` invariato, incrementando solo la sequence
-- La sequence, in questo modello, deve avere **bit sufficienti** a coprire la durata massima attesa di uno skew (es. se lo skew tipico è < 5 secondi, 12 bit bastano per ~4 secondi a 4096 ID/ms; 14 bit coprono ~16 secondi)
+**Miglioramento:** sostituire `lastTimestamp` con un **contatore monotono interno** (`monotonicMs`).
 
-**Trade-off:** gli ID generati durante uno skew avranno timestamp "vecchio", ma restano unici e ordinabili. Nessun errore, nessun outage.
+#### Prima e dopo a confronto
+
+```mermaid
+flowchart LR
+    subgraph BEFORE["❌ Approccio attuale: reject on skew"]
+        B1["timestamp = now()"] --> B2{"timestamp < lastTimestamp?"}
+        B2 -->|Yes| B3["🔓 Release Mutex"]
+        B3 --> B4["❌ Return error"]
+        B2 -->|No| B5["✅ Generate ID"]
+        B5 --> B6["lastTimestamp = timestamp"]
+    end
+
+    subgraph AFTER["✅ Monotonic Anchor"]
+        A1["timestamp = now()"] --> A2{"timestamp > monotonicMs?"}
+        A2 -->|Yes| A3["monotonicMs = timestamp<br>sequence = 0"]
+        A2 -->|No| A4["keep monotonicMs unchanged"]
+        A3 --> A5["✅ Generate ID"]
+        A4 --> A5
+        A5 --> A6["sequence++"]
+    end
+
+    style B4 fill:#b91c1c,color:#fff
+    style A5 fill:#15803d,color:#fff
+```
+
+#### Pseudocodice Go (prima e dopo)
+
+**Prima (reject):**
+```go
+timestamp := nowMs()
+if timestamp < g.lastTimestamp {
+    return 0, ErrClockSkew
+}
+if timestamp == g.lastTimestamp {
+    g.sequence = (g.sequence + 1) & sequenceMask
+    if g.sequence == 0 {
+        timestamp = tilNextMillis(g.lastTimestamp)
+    }
+} else {
+    g.sequence = 0
+}
+g.lastTimestamp = timestamp
+return compose(timestamp, g.nodeID, g.sequence), nil
+```
+
+**Dopo (monotonic anchor):**
+```go
+ts := nowMs()
+if ts > g.monotonicMs {
+    g.monotonicMs = ts
+    g.sequence = 0
+} // else: ts è arretrato → monotonicMs NON cambia
+if g.sequence == sequenceMask {
+    g.monotonicMs++ // avanza forzatamente se sequence satura
+    g.sequence = 0
+}
+id := compose(g.monotonicMs, g.nodeID, g.sequence)
+g.sequence++
+return id, nil
+```
+_Nota: `NextID()` non restituisce mai errore per clock skew._
+
+#### Analisi del cambiamento
+
+Il monotonicMs **disaccoppia** l'avanzamento del timestamp dal clock di sistema:
+
+| Scenario | `now()` | `monotonicMs` prima | Azione | `monotonicMs` dopo |
+|---|---|---|---|---|
+| Normale | 5000 | 4999 | `now() > monotonicMs` → aggiorna | 5000 |
+| Stesso ms | 5000 | 5000 | `now() == monotonicMs` → solo sequence++ | 5000 |
+| **Clock skew** | **4995** | 5000 | `now() ≤ monotonicMs` → **ignora skew** | **5000** |
+| Sequence overflow | 5000 | 5000 | `sequence == mask` → `monotonicMs++` | 5001 |
+
+**Cosa succede durante uno skew:**
+1. Il clock di sistema va da 5000 a 4995 (skew di -5ms)
+2. `monotonicMs` **rimane a 5000** — non torna mai indietro
+3. La sequence continua a incrementare normalmente
+4. Quando il clock recupera (es. 5010), `monotonicMs` riprende a seguirlo
+
+**Implicazioni:**
+- **Zero errori** → nessun 503, nessun fallimento a cascata
+- **Timestamp "vecchio" negli ID** durante lo skew → gli ID restano ordinabili ma con timestamp leggermente sfalsato rispetto al wall clock. In uno skew di 5ms, l'errore è trascurabile.
+- **La sequence deve assorbire lo skew** → con 12 bit (4096 ID/ms), uno skew di 1 secondo richiede ~4M ID per essere assorbito senza overflow. Se il throughput reale è 1000 ID/s, 12 bit bastano per ~4 secondi di skew.
+- **Se la sequence si satura durante lo skew:** `monotonicMs++` forza l'avanzamento. Questo "consuma" timestamp futuri, ma è un evento raro e comunque garantisce unicità.
+
 
 ### 2. Sequence: introdurre bit di randomness
 
