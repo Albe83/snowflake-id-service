@@ -1,8 +1,12 @@
 ---
-status: proposed
+status: superseded
 date: 2026-07-29
 decision-makers: Albe83
+superseded-by:
+  - 0003-128-bit-random-payload
 ---
+
+> **Superato da:** ADR 0003 — il modello UUIDv7 stateless non ha sezioni critiche da proteggere. Nessun mutex, nessun atomic-CAS necessario.
 
 # Lock-Free Generator via `atomic.CompareAndSwap`
 
