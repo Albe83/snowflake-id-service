@@ -54,10 +54,16 @@ _Nota: nessun percorso di errore per clock skew. Il node ID è effimero (cambia 
 
 ```mermaid
 sequenceDiagram
-    participant C as Client
-    participant S as Service
-    participant G as Generator (Mutex)
-    participant Ck as System Clock
+    box Client
+        participant C as Client
+    end
+    box "Service Scope"
+        participant S as Service
+        participant G as Generator
+    end
+    box System
+        participant Ck as System Clock
+    end
 
     C->>S: POST /v1/ids {"count": 3}
     S->>G: 🔒 NextID() × 3
