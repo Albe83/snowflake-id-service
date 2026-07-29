@@ -210,9 +210,7 @@ Assunzione: `crypto/rand` è una sorgente CSPRNG correttamente funzionante sul s
 
 ## Serializzazione
 
-Gli ID a 128 bit sono binari (16 byte). Tre formati supportati per la risposta JSON:
-
-### 1. UUID canonico (hex, RFC 9562)
+Gli ID a 128 bit sono binari (16 byte). La serializzazione è **esclusivamente** in formato UUID canonico RFC 9562.
 
 **Formato:** `xxxxxxxx-xxxx-7xxx-vxxx-xxxxxxxxxxxx` (36 caratteri, lowercase hex).
 
@@ -225,49 +223,6 @@ Raw bytes (hex):  018f3a2c 9e5b 7000 8000 123456789abc
 Timestamp (ms):   1717500204
 UUID canonico:    018f3a2c-9e5b-7000-8000-123456789abc
 ```
-
-### 2. Base64 URL-safe (RFC 4648, senza padding)
-
-**Alfabeto:** `A-Za-z0-9-_` (64 simboli, ordine standard).
-**Lunghezza fissa:** 22 caratteri (128 bit / 6 bit per simbolo = 21.33 → 22 caratteri, senza padding).
-**Encoding:** big-endian dei 16 byte raw, poi codifica Base64 URL-safe, rimuovere il padding `=`.
-
-**Ordinamento:** **non preserva** l'ordine del timestamp. Base64 non è lessicograficamente ordinabile rispetto ai byte raw sottostanti (l'alfabeto `A-Za-z` non mantiene l'ordine binario: `Z` < `a` in binario ma `Z` > `a` in Base64).
-
-**Test vector:**
-
-```
-Raw bytes (hex):  018f3a2c 9e5b 7000 8000 123456789abc
-Base64 URL-safe:   AY86LJ5bcACAAAAAABI0VniavA
-```
-
-### 3. Base62
-
-**Alfabeto:** `0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz` (62 simboli, ordine standard).
-**Lunghezza fissa:** 22 caratteri (128 bit in base 62 richiedono ⌈128 / log2(62)⌉ = 22 caratteri), con zero-padding a sinistra.
-**Encoding:** big-endian dei 16 byte raw interpretati come intero a 128 bit, convertito in Base62, riempito a 22 caratteri con `0` a sinistra.
-
-**Ordinamento:** **preserva** l'ordine del timestamp (la conversione big-endian integer → Base62 con zero-padding è order-preserving per valori positivi).
-
-**Test vector:**
-
-```
-Raw bytes (hex):  018f3a2c 9e5b 7000 8000 123456789abc
-Integer (dec):     2210484570757209625449833905156687548
-Base62:             0A9fxN5qTgK8vWnJcYzL1mR2pB3sH4
-```
-
-### Raccomandazione
-
-**UUID canonico** come formato predefinito: interoperabilità con UUIDv7, supporto nativo in tutti i database, ordinamento preservato. Usare Base62 o Base64 solo se la compattezza è un requisito dimostrato e misurato.
-
-### Riepilogo proprietà
-
-| Formato | Caratteri | Order-preserving | Standard |
-|---|---|---|---|
-| UUID canonico | 36 | Sì (timestamp, non random) | RFC 9562 |
-| Base64 URL-safe | 22 | No | RFC 4648 |
-| Base62 | 22 | Sì (timestamp, non random) | Custom |
 
 ## Cosa NON serve (design a 128 bit)
 
