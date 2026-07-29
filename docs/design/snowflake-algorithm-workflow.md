@@ -273,80 +273,19 @@ La differenza è che l'originale **non rileva** il clock skew cross-restart perc
 
 ### 3. Node ID: derivazione automatica invece di configurazione manuale
 
-**Problema attuale:** ogni istanza richiede un node ID univoco a 10 bit (1024 max). Assegnazione manuale non scala; Zookeeper aggiunge complessità; StatefulSet ordinal funziona solo su K8s.
+**Stato:** reso ridondante dal miglioramento #1.
 
-**Fonti:** XID deriva il machine ID dall'hostname (3 byte); Sonyflake usa i 16 bit bassi dell'IP privato; ULID/KSUID/UUIDv7 eliminano completamente il node ID.
+L'approccio a node ID effimero (`PID ⊕ startupEpoch ⊕ rand()`) risolve simultaneamente:
+- **Zero configurazione**: nessun node ID da assegnare manualmente
+- **Protezione cross-restart**: cambiando node ID a ogni riavvio, ID pre e post restart non collidono mai
 
-**Miglioramento:** derivare automaticamente il node ID con una **cascata di fallback** ordinata per stabilità decrescente.
+Una cascata di derivazione stabile (K8s ordinal → IP hash → random) aggiungerebbe identità persistente ai pod, utile per monitoring, ma:
+- L'identità stabile è un requisito di osservabilità, non di generazione ID — si ottiene da `POD_NAME`/`hostname` senza toccare il generatore
+- Un node ID stabile riaprirebbe il problema cross-restart, richiedendo persistenza di `monotonicMs`
 
-#### Cascata di derivazione
+**Verdetto:** il node ID rimane puramente effimero, generato all'avvio senza input esterni.
 
-```mermaid
-flowchart TD
-    START["derive nodeID"] --> K8S{"K8s POD_NAME<br>and ordinal present?"}
-    K8S -->|Yes| O["nodeID = ordinal<br>stable across pod restarts"]
-    K8S -->|No| ENV{"NODE_ID env set?"}
-    ENV -->|Yes| E["nodeID = NODE_ID<br>explicit override"]
-    ENV -->|No| HOST["nodeID = hash(lower16bits(privateIP))<br>stable per host"]
-    HOST --> UNIQUE{"collision check<br>on same host?"}
-    UNIQUE -->|safe| USE_HOST["✅ use host-derived ID"]
-    UNIQUE -->|conflict| RND["fallback: nodeID = rand()<br>different per process"]
-
-    style O fill:#15803d,color:#fff
-    style E fill:#15803d,color:#fff
-    style USE_HOST fill:#15803d,color:#fff
-    style RND fill:#fbbf24,color:#000
-```
-
-#### Dettaglio dei livelli
-
-| Priorità | Metodo | Stabilità | Rischio collisione | Adatto a |
-|---|---|---|---|---|
-| 1 | **K8s ordinal** da `POD_NAME` | Stabile (stesso pod = stesso ID) | Zero (K8s garantisce ordinal univoco) | Deployment K8s StatefulSet |
-| 2 | **Env `NODE_ID`** | Stabile (configurato) | Zero (responsabilità operatore) | Dev locale, ambienti non-K8s |
-| 3 | **Hash IP privato** (16 bit bassi) | Stabile (stesso host = stesso ID) | Basso (in VPC, IP privati sono unici) | Server bare-metal, VM in VPC |
-| 4 | **Random** (`crypto/rand`) | Effimero (cambia a ogni restart) | Probabilità 1/1024 per collisione | Fallback ultima spiaggia |
-
-#### Pseudocodice
-
-```go
-func deriveNodeID() int64 {
-    // 1. K8s StatefulSet ordinal
-    if name := os.Getenv("POD_NAME"); name != "" {
-        if ordinal := extractOrdinal(name); ordinal >= 0 {
-            return int64(ordinal)
-        }
-    }
-    // 2. Explicit override
-    if id := os.Getenv("NODE_ID"); id != "" {
-        if n, err := strconv.Atoi(id); err == nil {
-            return int64(n)
-        }
-    }
-    // 3. Host-based (stable)
-    if ip := privateIPv4(); ip != nil {
-        return int64(binary.BigEndian.Uint16(ip[2:4])) & 0x3FF
-    }
-    // 4. Random fallback
-    b := make([]byte, 2)
-    cryptoRand.Read(b)
-    return int64(binary.BigEndian.Uint16(b)) & 0x3FF
-}
-```
-
-#### Pro e contro
-
-**Pro:**
-- **Zero configurazione** nella quasi totalità dei casi
-- **Stabilità** su K8s: lo stesso pod mantiene lo stesso node ID attraverso i restart → utile per monitoring, log correlation, rate limiting per-node
-- **Gerarchia chiara**: ogni livello ha una semantica definita
-- **Nessuna dipendenza esterna**: Zookeeper, etcd non servono
-
-**Contro:**
-- **Hash IP privato** può collidere in reti con overlapping CIDR (container su stesso host senza network namespace isolato, es. Docker default bridge)
-- Su K8s, l'estrazione dell'ordinal dal `POD_NAME` richiede parsing (`pod-name-3` → `3`) — fragile se il naming scheme cambia
-- Il fallback random con 10 bit ha 1/1024 probabilità di collisione tra due processi sullo stesso host
-- **Priorità vs ephemeral**: l'approccio stabile (host-based) confligge con la strategia a node ID effimero della miglioria #1. L'effimero risolve il cross-restart skew, lo stabile dà identità persistente. Vanno composti: **K8s ordinal è stabile e il più desiderabile**, il random effimero è l'ultima risorsa.
+**Fonti di riferimento:** XID usa machine ID automatico ma stabile (hostname hash) — non affronta il cross-restart skew. ULID/KSUID/UUIDv7 eliminano completamente il node ID.
 
 ### 4. Eliminare il Mutex: generator lock-free
 
