@@ -4,29 +4,29 @@ info:
   title: Snowflake ID Service
   version: "0.1.0"
   description: >
-    Microservizio REST per la generazione di UUIDv7 a 128 bit
-    (48 bit Unix timestamp ms + 74 bit random, RFC 9562).
-    Stateless, zero-coordination, pronto per Kubernetes.
+    REST microservice for generating 128-bit UUIDv7 IDs
+    (48-bit Unix timestamp ms + 74-bit random, RFC 9562).
+    Stateless, zero-coordination, Kubernetes-ready.
 
 servers:
   - url: http://localhost:8080
-    description: Locale / dev
+    description: Local / dev
 
 paths:
   /v1/ids:
     post:
       operationId: generateIds
-      summary: Genera uno o più UUIDv7
+      summary: Generate one or more UUIDv7 IDs
       description: >
-        Genera da 1 a 1000 UUIDv7 in un'unica chiamata.
-        Se il parametro `count` è omesso, viene generato un singolo ID.
-        Tutti gli ID condividono lo stesso timestamp (acquisito una sola volta).
+        Generates 1 to 1000 UUIDv7 IDs in a single call.
+        If the `count` parameter is omitted, a single ID is generated.
+        All IDs share the same timestamp (acquired once).
       tags: [IDs]
       parameters:
         - name: count
           in: query
           required: false
-          description: Numero di ID da generare. Default 1, max 1000.
+          description: Number of IDs to generate. Default 1, max 1000.
           schema:
             type: integer
             minimum: 1
@@ -35,7 +35,7 @@ paths:
             example: 3
       responses:
         "200":
-          description: Richiesta completata con successo.
+          description: Request completed successfully.
           content:
             application/json:
               schema:
@@ -50,23 +50,23 @@ paths:
   /v1/ids/{id}:
     get:
       operationId: decodeId
-      summary: Decodifica un UUIDv7 nei suoi componenti
+      summary: Decode a UUIDv7 into its components
       description: >
-        Estrae timestamp, versione, variante e payload casuale da un UUIDv7.
-        Restituisce 404 se l'ID non è un UUIDv7 valido.
+        Extracts timestamp, version, variant, and random payload from a UUIDv7.
+        Returns 404 if the ID is not a valid UUIDv7.
       tags: [IDs]
       parameters:
         - name: id
           in: path
           required: true
-          description: UUID canonico (36 caratteri, lowercase hex).
+          description: Canonical UUID string (36 chars, lowercase hex).
           schema:
             type: string
             pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
             example: "018f3a2c-9e5b-7000-8000-123456789abc"
       responses:
         "200":
-          description: Decodifica completata.
+          description: Decode completed.
           content:
             application/json:
               schema:
@@ -74,7 +74,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
-          description: L'ID specificato non è un UUIDv7 valido.
+          description: The specified ID is not a valid UUIDv7.
           content:
             application/json:
               schema:
@@ -87,12 +87,12 @@ paths:
       operationId: healthCheck
       summary: Liveness probe
       description: >
-        Restituisce sempre 200 se il processo è vivo.
-        Usato da Kubernetes come liveness probe.
+        Always returns 200 if the process is alive.
+        Used by Kubernetes as a liveness probe.
       tags: [Health]
       responses:
         "200":
-          description: Servizio attivo.
+          description: Service is alive.
           content:
             application/json:
               schema:
@@ -103,19 +103,19 @@ paths:
       operationId: readyCheck
       summary: Readiness probe
       description: >
-        Restituisce 200 se il servizio è pronto ad accettare richieste.
-        Restituisce 503 durante graceful shutdown (drain).
-        Usato da Kubernetes come readiness probe.
+        Returns 200 if the service is ready to accept requests.
+        Returns 503 during graceful shutdown (drain).
+        Used by Kubernetes as a readiness probe.
       tags: [Health]
       responses:
         "200":
-          description: Servizio pronto.
+          description: Service is ready.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/StatusResponse"
         "503":
-          description: Servizio non pronto (drain in corso).
+          description: Service is not ready (drain in progress).
           content:
             application/json:
               schema:
@@ -124,15 +124,15 @@ paths:
   /metrics:
     get:
       operationId: getMetrics
-      summary: Metriche Prometheus
+      summary: Prometheus metrics
       description: >
-        Espone metriche in formato testo Prometheus.
-        Contenuto generato dal client_golang default registry
-        (es. `go_goroutines`, `process_open_fds`, metriche custom).
+        Exposes metrics in Prometheus text format.
+        Content generated via the client_golang default registry
+        (e.g. `go_goroutines`, `process_open_fds`, custom metrics).
       tags: [Observability]
       responses:
         "200":
-          description: Metriche in formato testo Prometheus.
+          description: Metrics in Prometheus text format.
           content:
             text/plain:
               schema:
@@ -146,7 +146,7 @@ components:
       properties:
         ids:
           type: array
-          description: Lista di UUIDv7 generati.
+          description: List of generated UUIDv7 IDs.
           minItems: 1
           maxItems: 1000
           items:
@@ -162,31 +162,31 @@ components:
         id:
           type: string
           format: uuid
-          description: L'UUID canonico ricevuto.
+          description: The canonical UUID received.
           example: "018f3a2c-9e5b-7000-8000-123456789abc"
         timestamp_ms:
           type: integer
           format: int64
-          description: Unix timestamp in millisecondi (48 bit).
+          description: Unix timestamp in milliseconds (48-bit).
           example: 1717500204000
         timestamp_iso:
           type: string
           format: date-time
-          description: Timestamp in formato ISO 8601.
+          description: Timestamp in ISO 8601 format.
           example: "2024-06-04T10:03:24.000Z"
         version:
           type: integer
-          description: Versione UUID (sempre 7 per UUIDv7).
+          description: UUID version (always 7 for UUIDv7).
           example: 7
           enum: [7]
         variant:
           type: string
-          description: Variante UUID in notazione binaria.
+          description: UUID variant in binary notation.
           example: "10xx"
           enum: ["10xx"]
         random_bytes:
           type: string
-          description: Payload casuale (74 bit) in esadecimale.
+          description: Random payload (74 bits) in hexadecimal.
           example: "00008000123456789abc"
 
     StatusResponse:
@@ -195,7 +195,7 @@ components:
       properties:
         status:
           type: string
-          description: Stato del servizio.
+          description: Service status.
           example: "ok"
           enum: ["ok"]
 
@@ -205,26 +205,26 @@ components:
       properties:
         error:
           type: string
-          description: Descrizione dell'errore.
+          description: Error description.
           example: "batch size must be between 1 and 1000"
 
   responses:
     BadRequest:
-      description: Richiesta non valida (input malformato o fuori range).
+      description: Invalid request (malformed or out-of-range input).
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
 
     InternalError:
-      description: Errore interno del server (es. fallimento crypto/rand).
+      description: Internal server error (e.g. crypto/rand failure).
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
 
     NotReady:
-      description: Servizio non pronto (shutdown in corso).
+      description: Service is not ready (shutdown in progress).
       content:
         application/json:
           schema:
@@ -232,8 +232,8 @@ components:
 
 tags:
   - name: IDs
-    description: Generazione e decodifica UUIDv7
+    description: UUIDv7 generation and decoding
   - name: Health
-    description: Probe di liveness e readiness
+    description: Liveness and readiness probes
   - name: Observability
-    description: Metriche e diagnostica
+    description: Metrics and diagnostics
