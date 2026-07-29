@@ -214,6 +214,54 @@ Il monotonicMs **disaccoppia** l'avanzamento del timestamp dal clock di sistema:
 - **La sequence deve assorbire lo skew** → con 12 bit (4096 ID/ms), uno skew di 1 secondo richiede ~4M ID per essere assorbito senza overflow. Se il throughput reale è 1000 ID/s, 12 bit bastano per ~4 secondi di skew.
 - **Se la sequence si satura durante lo skew:** `monotonicMs++` forza l'avanzamento. Questo "consuma" timestamp futuri, ma è un evento raro e comunque garantisce unicità.
 
+#### Inizializzazione e persistenza
+
+**Domanda critica:** all'avvio, a che valore si inizializza `monotonicMs`?
+
+```go
+func NewGenerator(nodeID int64, epoch int64) *Generator {
+    return &Generator{
+        nodeID:      nodeID,
+        epoch:       epoch,
+        monotonicMs: nowMs(), // ← inizializzato al clock corrente
+        sequence:    0,
+    }
+}
+```
+
+All'avvio, `monotonicMs = nowMs()`. Questo funziona perché il processo non ha ancora generato ID, quindi non c'è un passato da proteggere. Il monotonic anchor garantisce che **durante la vita del processo**, il timestamp non torni mai indietro.
+
+**Cosa succede dopo un restart?** È qui che il monotonic anchor da solo non basta:
+
+```
+Prima del restart: ultimo ID → monotonicMs=5000, node=5, sequence=100
+... SERVICE RESTART ...
+Dopo il restart:    monotonicMs = now() = 4990  ← clock arretrato rispetto a prima!
+                    Primo ID → monotonicMs=4990, node=5, sequence=0
+                    ⚠ Collisione possibile con ID generati prima del restart!
+```
+
+Tre modi per risolvere, in ordine di complessità crescente:
+
+| Strategia | Come funziona | Pro | Contro |
+|---|---|---|---|
+| **Node ID effimero** | A ogni restart, il node ID cambia (es. PID + timestamp di avvio). L'ID pre-restart ha node=5, post-restart ha node=23. Nessuna collisione possibile. | Zero I/O, zero stato | Consuma node ID; K8s ordinals vanno mappati diversamente |
+| **Persistenza su file** | Prima dello shutdown, scrivi `monotonicMs` su file. All'avvio: `monotonicMs = max(now(), fileValue + 1)`. | Risolve completamente | Richiede graceful shutdown; file system dipendency; il file può corrompersi |
+| **K8s StatefulSet + PVC** | Il `monotonicMs` viene scritto su un PersistentVolume legato al pod. Al restart sullo stesso ordinal, il valore viene recuperato. | Robusto, nativo K8s | Complessità operativa |
+
+**Confronto con l'algoritmo originale:**
+
+L'algoritmo originale ha lo **stesso identico problema**, solo nascosto:
+
+```go
+// Originale: lastTimestamp inizializzato a 0
+lastTimestamp := int64(0)
+// Primo NextID(): now() >= 0 → sempre true, nessun controllo di skew
+timestamp := nowMs() // usa 4990, ignora che prima del restart era 5000
+```
+
+La differenza è che l'originale **non rileva** il clock skew cross-restart perché `lastTimestamp = 0` è sempre ≤ `now()`. Il monotonic anchor rende il problema **esplicito** e fornisce un meccanismo per risolverlo (persistenza su file). Ma per il caso d'uso a basso volume con K8s, la strategia più pragmatica è **node ID effimero**: non richiede persistenza, è a prova di restart non graceful, e sfrutta il fatto che abbiamo più bit di node ID di quanti ne servano realmente.
+
 
 ### 2. Sequence: introdurre bit di randomness
 
