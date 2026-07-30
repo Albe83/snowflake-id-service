@@ -1,7 +1,10 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -15,12 +18,21 @@ import (
 
 var uuidV7Re = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
+func testHandler(gen *idgen.Generator, buf *bytes.Buffer) http.Handler {
+	var w io.Writer = io.Discard
+	if buf != nil {
+		w = buf
+	}
+	log := slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	return New(gen, log).Routes()
+}
+
 func TestGenerateIDs_DefaultCount(t *testing.T) {
-	mux := New(idgen.NewGenerator(nil)).Routes()
+	h := testHandler(idgen.NewGenerator(nil), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/ids", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
@@ -42,11 +54,11 @@ func TestGenerateIDs_DefaultCount(t *testing.T) {
 }
 
 func TestGenerateIDs_BatchCount(t *testing.T) {
-	mux := New(idgen.NewGenerator(nil)).Routes()
+	h := testHandler(idgen.NewGenerator(nil), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/ids?count=3", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
@@ -73,11 +85,11 @@ func TestGenerateIDs_BatchCount(t *testing.T) {
 }
 
 func TestGenerateIDs_MaxBoundary(t *testing.T) {
-	mux := New(idgen.NewGenerator(nil)).Routes()
+	h := testHandler(idgen.NewGenerator(nil), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/ids?count=1000", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
@@ -104,7 +116,7 @@ func TestGenerateIDs_MaxBoundary(t *testing.T) {
 }
 
 func TestGenerateIDs_InvalidCount(t *testing.T) {
-	mux := New(idgen.NewGenerator(nil)).Routes()
+	h := testHandler(idgen.NewGenerator(nil), nil)
 
 	tests := []struct {
 		name   string
@@ -120,7 +132,7 @@ func TestGenerateIDs_InvalidCount(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, tt.target, nil)
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			h.ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
@@ -138,11 +150,11 @@ func TestGenerateIDs_InvalidCount(t *testing.T) {
 
 func TestGenerateIDs_TimestampMatchesClock(t *testing.T) {
 	fixedMS := int64(1717500204000)
-	mux := New(idgen.NewGenerator(func() int64 { return fixedMS })).Routes()
+	h := testHandler(idgen.NewGenerator(func() int64 { return fixedMS }), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/ids", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
@@ -167,11 +179,11 @@ func TestGenerateIDs_TimestampMatchesClock(t *testing.T) {
 }
 
 func TestGenerateIDs_GeneratorError_500(t *testing.T) {
-	mux := New(idgen.NewGenerator(func() int64 { return 1 << 48 })).Routes()
+	h := testHandler(idgen.NewGenerator(func() int64 { return 1 << 48 }), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/ids", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusInternalServerError)
@@ -186,7 +198,7 @@ func TestGenerateIDs_GeneratorError_500(t *testing.T) {
 }
 
 func TestGenerateIDs_ConcurrentNoDuplicates(t *testing.T) {
-	mux := New(idgen.NewGenerator(nil)).Routes()
+	h := testHandler(idgen.NewGenerator(nil), nil)
 
 	const goroutines = 10
 	const count = 1000
@@ -201,7 +213,7 @@ func TestGenerateIDs_ConcurrentNoDuplicates(t *testing.T) {
 			defer wg.Done()
 			req := httptest.NewRequest(http.MethodPost, "/v1/ids?count="+strconv.Itoa(count), nil)
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			h.ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusOK {
 				t.Errorf("status: got %d, want %d", rec.Code, http.StatusOK)
@@ -231,11 +243,11 @@ func TestGenerateIDs_ConcurrentNoDuplicates(t *testing.T) {
 }
 
 func TestDecodeID_Valid(t *testing.T) {
-	mux := New(idgen.NewGenerator(nil)).Routes()
+	h := testHandler(idgen.NewGenerator(nil), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/ids/018f3a2c-9e5b-7000-8000-123456789abc", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
@@ -269,7 +281,7 @@ func TestDecodeID_Valid(t *testing.T) {
 }
 
 func TestDecodeID_Invalid(t *testing.T) {
-	mux := New(idgen.NewGenerator(nil)).Routes()
+	h := testHandler(idgen.NewGenerator(nil), nil)
 
 	tests := []struct {
 		name string
@@ -287,7 +299,7 @@ func TestDecodeID_Invalid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/v1/ids/"+tt.id, nil)
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			h.ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
@@ -304,11 +316,11 @@ func TestDecodeID_Invalid(t *testing.T) {
 }
 
 func TestDecodeID_Roundtrip(t *testing.T) {
-	mux := New(idgen.NewGenerator(nil)).Routes()
+	h := testHandler(idgen.NewGenerator(nil), nil)
 
 	genReq := httptest.NewRequest(http.MethodPost, "/v1/ids", nil)
 	genRec := httptest.NewRecorder()
-	mux.ServeHTTP(genRec, genReq)
+	h.ServeHTTP(genRec, genReq)
 
 	var genResp generateResponse
 	if err := json.Unmarshal(genRec.Body.Bytes(), &genResp); err != nil {
@@ -318,7 +330,7 @@ func TestDecodeID_Roundtrip(t *testing.T) {
 
 	decReq := httptest.NewRequest(http.MethodGet, "/v1/ids/"+generated, nil)
 	decRec := httptest.NewRecorder()
-	mux.ServeHTTP(decRec, decReq)
+	h.ServeHTTP(decRec, decReq)
 
 	if decRec.Code != http.StatusOK {
 		t.Fatalf("decode status: got %d, want %d", decRec.Code, http.StatusOK)
@@ -342,11 +354,11 @@ func TestDecodeID_Roundtrip(t *testing.T) {
 }
 
 func TestRoutes_Healthz(t *testing.T) {
-	mux := New(idgen.NewGenerator(nil)).Routes()
+	h := testHandler(idgen.NewGenerator(nil), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
@@ -361,11 +373,11 @@ func TestRoutes_Healthz(t *testing.T) {
 }
 
 func TestRoutes_Readyz(t *testing.T) {
-	mux := New(idgen.NewGenerator(nil)).Routes()
+	h := testHandler(idgen.NewGenerator(nil), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
@@ -380,11 +392,11 @@ func TestRoutes_Readyz(t *testing.T) {
 }
 
 func TestRoutes_MetricsNotFound(t *testing.T) {
-	mux := New(idgen.NewGenerator(nil)).Routes()
+	h := testHandler(idgen.NewGenerator(nil), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusNotFound)
@@ -392,13 +404,121 @@ func TestRoutes_MetricsNotFound(t *testing.T) {
 }
 
 func TestRoutes_MethodNotAllowed(t *testing.T) {
-	mux := New(idgen.NewGenerator(nil)).Routes()
+	h := testHandler(idgen.NewGenerator(nil), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/ids", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestLogging_AccessLog(t *testing.T) {
+	var buf bytes.Buffer
+	h := testHandler(idgen.NewGenerator(nil), &buf)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/ids", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	logOutput := buf.String()
+	for _, want := range []string{
+		"level=INFO",
+		"msg=request",
+		"method=POST",
+		"path=/v1/ids",
+		"status=200",
+	} {
+		if !strings.Contains(logOutput, want) {
+			t.Fatalf("log missing %q, got:\n%s", want, logOutput)
+		}
+	}
+}
+
+func TestLogging_HealthzNotLogged(t *testing.T) {
+	var buf bytes.Buffer
+	h := testHandler(idgen.NewGenerator(nil), &buf)
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+	if buf.Len() > 0 {
+		t.Fatalf("healthz should not be logged, got:\n%s", buf.String())
+	}
+}
+
+func TestLogging_ReadyzNotLogged(t *testing.T) {
+	var buf bytes.Buffer
+	h := testHandler(idgen.NewGenerator(nil), &buf)
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+	if buf.Len() > 0 {
+		t.Fatalf("readyz should not be logged, got:\n%s", buf.String())
+	}
+}
+
+func TestLogging_GeneratorError500(t *testing.T) {
+	var buf bytes.Buffer
+	h := testHandler(idgen.NewGenerator(func() int64 { return 1 << 48 }), &buf)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/ids", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, `level=ERROR`) {
+		t.Fatalf("log missing ERROR level, got:\n%s", logOutput)
+	}
+	if !strings.Contains(logOutput, `msg="generate failed"`) {
+		t.Fatalf("log missing generate failed message, got:\n%s", logOutput)
+	}
+	if !strings.Contains(logOutput, "status=500") {
+		t.Fatalf("log missing status=500 access line, got:\n%s", logOutput)
+	}
+}
+
+func TestLogging_BadRequest400_DebugOnly(t *testing.T) {
+	var buf bytes.Buffer
+	h := testHandler(idgen.NewGenerator(nil), &buf)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/ids?count=abc", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+
+	logOutput := buf.String()
+	// testHandler uses Debug level, so the DebugContext line should be present
+	if !strings.Contains(logOutput, "level=DEBUG") {
+		t.Fatalf("log missing DEBUG level for bad request, got:\n%s", logOutput)
+	}
+	if !strings.Contains(logOutput, "bad request") {
+		t.Fatalf("log missing bad request message, got:\n%s", logOutput)
+	}
+	// access line should still be Info
+	if !strings.Contains(logOutput, "status=400") {
+		t.Fatalf("log missing status=400 access line, got:\n%s", logOutput)
 	}
 }
