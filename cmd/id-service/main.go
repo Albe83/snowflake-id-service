@@ -4,11 +4,12 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/Albe83/id-service/internal/idgen"
 	"github.com/Albe83/id-service/internal/server"
 )
 
 func main() {
-	srv := server.New()
+	srv := server.New(idgen.NewGenerator(nil))
 	mux := srv.Routes()
 
 	addr := ":8080"

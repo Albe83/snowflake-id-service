@@ -3,11 +3,18 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+
+	"github.com/Albe83/id-service/internal/idgen"
 )
 
-type Server struct{}
+type Server struct {
+	gen *idgen.Generator
+}
 
-func New() *Server { return &Server{} }
+func New(gen *idgen.Generator) *Server {
+	return &Server{gen: gen}
+}
 
 func (s *Server) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
@@ -35,10 +42,36 @@ type statusResponse struct {
 	Status string `json:"status"`
 }
 
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
 func (s *Server) generateIDs(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, generateResponse{
-		IDs: []string{"018f3a2c-9e5b-7000-8000-123456789abc"},
-	})
+	count := 1
+	if q := r.URL.Query().Get("count"); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n < 1 || n > idgen.MaxBatchSize {
+			writeJSON(w, http.StatusBadRequest, errorResponse{
+				Error: "count must be between 1 and " + strconv.Itoa(idgen.MaxBatchSize),
+			})
+			return
+		}
+		count = n
+	}
+
+	ids, err := s.gen.NextIDs(count)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errorResponse{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = idgen.String(id)
+	}
+	writeJSON(w, http.StatusOK, generateResponse{IDs: out})
 }
 
 func (s *Server) decodeID(w http.ResponseWriter, r *http.Request) {

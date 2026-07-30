@@ -79,7 +79,7 @@ func TestNextIDs_ErrorOnInvalidBatchSize(t *testing.T) {
 	}{
 		{"zero", 0},
 		{"negative", -1},
-		{"over max", maxBatchSize + 1},
+		{"over max", MaxBatchSize + 1},
 	}
 
 	for _, tt := range tests {

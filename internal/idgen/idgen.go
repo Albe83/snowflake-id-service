@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const maxBatchSize = 1000
+const MaxBatchSize = 1000
 
 type Generator struct {
 	now func() int64
@@ -48,8 +48,8 @@ func (g *Generator) NextID() ([16]byte, error) {
 }
 
 func (g *Generator) NextIDs(n int) ([][16]byte, error) {
-	if n <= 0 || n > maxBatchSize {
-		return nil, fmt.Errorf("batch size %d must be between 1 and %d", n, maxBatchSize)
+	if n <= 0 || n > MaxBatchSize {
+		return nil, fmt.Errorf("batch size %d must be between 1 and %d", n, MaxBatchSize)
 	}
 
 	ts := g.now()
