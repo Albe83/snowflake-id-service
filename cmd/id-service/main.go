@@ -1,48 +1,58 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
-	"strings"
+	"os/signal"
+	"syscall"
+	"time"
 
+	"github.com/Albe83/id-service/internal/config"
 	"github.com/Albe83/id-service/internal/idgen"
 	"github.com/Albe83/id-service/internal/server"
 )
 
-func parseLogLevel(env string) (slog.Level, error) {
-	switch strings.ToLower(env) {
-	case "", "info":
-		return slog.LevelInfo, nil
-	case "debug":
-		return slog.LevelDebug, nil
-	case "warn", "warning":
-		return slog.LevelWarn, nil
-	case "error":
-		return slog.LevelError, nil
-	default:
-		return 0, fmt.Errorf("invalid LOG_LEVEL %q: want debug, info, warn, or error", env)
-	}
-}
+const shutdownTimeout = 10 * time.Second
 
 func main() {
-	level, err := parseLogLevel(os.Getenv("LOG_LEVEL"))
+	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
 	slog.SetDefault(logger)
 
-	addr := ":8080"
 	srv := server.New(idgen.NewGenerator(nil), logger)
-	handler := srv.Routes()
+	httpServer := &http.Server{
+		Addr:    cfg.Addr,
+		Handler: srv.Routes(),
+	}
 
-	logger.Info("service starting", "addr", addr)
-	if err := http.ListenAndServe(addr, handler); err != nil {
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		<-stop
+		logger.Info("shutting down", "signal", "received")
+		srv.BeginDrain()
+
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if err := httpServer.Shutdown(ctx); err != nil {
+			logger.Error("shutdown failed", "error", err)
+		}
+	}()
+
+	logger.Info("service starting", "addr", cfg.Addr)
+	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("server failed", "error", err)
 		os.Exit(1)
 	}
+	logger.Info("service stopped")
 }

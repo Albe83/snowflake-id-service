@@ -5,14 +5,16 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/Albe83/id-service/internal/idgen"
 )
 
 type Server struct {
-	gen *idgen.Generator
-	log *slog.Logger
+	gen      *idgen.Generator
+	log      *slog.Logger
+	draining atomic.Bool
 }
 
 func New(gen *idgen.Generator, log *slog.Logger) *Server {
@@ -20,6 +22,10 @@ func New(gen *idgen.Generator, log *slog.Logger) *Server {
 		log = slog.Default()
 	}
 	return &Server{gen: gen, log: log}
+}
+
+func (s *Server) BeginDrain() {
+	s.draining.Store(true)
 }
 
 func (s *Server) Routes() http.Handler {
@@ -113,6 +119,10 @@ func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
+	if s.draining.Load() {
+		writeJSON(w, http.StatusServiceUnavailable, statusResponse{Status: "draining"})
+		return
+	}
 	writeJSON(w, http.StatusOK, statusResponse{Status: "ok"})
 }
 

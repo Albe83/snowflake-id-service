@@ -415,6 +415,46 @@ func TestRoutes_MethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestReadyz_Draining(t *testing.T) {
+	srv := New(idgen.NewGenerator(nil), nil)
+	srv.BeginDrain()
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+	var resp statusResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Status != "draining" {
+		t.Fatalf("status body: got %q, want %q", resp.Status, "draining")
+	}
+}
+
+func TestHealthz_StaysOkDuringDrain(t *testing.T) {
+	srv := New(idgen.NewGenerator(nil), nil)
+	srv.BeginDrain()
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d (healthz must stay 200 during drain)", rec.Code, http.StatusOK)
+	}
+	var resp statusResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Status != "ok" {
+		t.Fatalf("status body: got %q, want %q", resp.Status, "ok")
+	}
+}
+
 func TestLogging_AccessLog(t *testing.T) {
 	var buf bytes.Buffer
 	h := testHandler(idgen.NewGenerator(nil), &buf)
