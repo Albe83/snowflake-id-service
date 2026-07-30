@@ -230,7 +230,7 @@ func TestGenerateIDs_ConcurrentNoDuplicates(t *testing.T) {
 	}
 }
 
-func TestRoutes_DecodeStub(t *testing.T) {
+func TestDecodeID_Valid(t *testing.T) {
 	mux := New(idgen.NewGenerator(nil)).Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/ids/018f3a2c-9e5b-7000-8000-123456789abc", nil)
@@ -240,17 +240,104 @@ func TestRoutes_DecodeStub(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
 	}
-	want := `{"id":"018f3a2c-9e5b-7000-8000-123456789abc","timestamp_ms":1714667953755,"timestamp_iso":"2024-05-02T16:39:13.755Z","version":7,"variant":"10xx","random_payload":"00000000123456789abc"}`
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type: got %q, want application/json", ct)
+	}
 
-	var got, wantMap map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
+	var resp decodeResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
 	}
-	if err := json.Unmarshal([]byte(want), &wantMap); err != nil {
-		t.Fatalf("unmarshal want: %v", err)
+	if resp.ID != "018f3a2c-9e5b-7000-8000-123456789abc" {
+		t.Fatalf("id: got %q, want canonical echo", resp.ID)
 	}
-	if !equalJSON(got, wantMap) {
-		t.Fatalf("body: got %s, want %s", rec.Body.String(), want)
+	if resp.TimestampMs != 1714667953755 {
+		t.Fatalf("timestamp_ms: got %d, want %d", resp.TimestampMs, 1714667953755)
+	}
+	if resp.TimestampISO != "2024-05-02T16:39:13.755Z" {
+		t.Fatalf("timestamp_iso: got %q, want %q", resp.TimestampISO, "2024-05-02T16:39:13.755Z")
+	}
+	if resp.Version != 7 {
+		t.Fatalf("version: got %d, want 7", resp.Version)
+	}
+	if resp.Variant != "10xx" {
+		t.Fatalf("variant: got %q, want %q", resp.Variant, "10xx")
+	}
+	if resp.RandomPayload != "00000000123456789abc" {
+		t.Fatalf("random_payload: got %q, want %q", resp.RandomPayload, "00000000123456789abc")
+	}
+}
+
+func TestDecodeID_Invalid(t *testing.T) {
+	mux := New(idgen.NewGenerator(nil)).Routes()
+
+	tests := []struct {
+		name string
+		id   string
+	}{
+		{"not a uuid", "not-a-uuid"},
+		{"too short", "018f3a2c-9e5b-7000-8000-123456789ab"},
+		{"version 4", "018f3a2c-9e5b-4000-8000-123456789abc"},
+		{"variant 00", "018f3a2c-9e5b-7000-0000-123456789abc"},
+		{"uppercase", "018F3A2C-9E5B-7000-8000-123456789ABC"},
+		{"non-hex", "018f3a2c-9e5b-7000-8000-123456789abz"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/v1/ids/"+tt.id, nil)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
+			}
+			var resp errorResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if resp.Error == "" {
+				t.Fatal("empty error message")
+			}
+		})
+	}
+}
+
+func TestDecodeID_Roundtrip(t *testing.T) {
+	mux := New(idgen.NewGenerator(nil)).Routes()
+
+	genReq := httptest.NewRequest(http.MethodPost, "/v1/ids", nil)
+	genRec := httptest.NewRecorder()
+	mux.ServeHTTP(genRec, genReq)
+
+	var genResp generateResponse
+	if err := json.Unmarshal(genRec.Body.Bytes(), &genResp); err != nil {
+		t.Fatalf("generate unmarshal: %v", err)
+	}
+	generated := genResp.IDs[0]
+
+	decReq := httptest.NewRequest(http.MethodGet, "/v1/ids/"+generated, nil)
+	decRec := httptest.NewRecorder()
+	mux.ServeHTTP(decRec, decReq)
+
+	if decRec.Code != http.StatusOK {
+		t.Fatalf("decode status: got %d, want %d", decRec.Code, http.StatusOK)
+	}
+	var decResp decodeResponse
+	if err := json.Unmarshal(decRec.Body.Bytes(), &decResp); err != nil {
+		t.Fatalf("decode unmarshal: %v", err)
+	}
+	if decResp.ID != generated {
+		t.Fatalf("id echo: got %q, want %q", decResp.ID, generated)
+	}
+	if decResp.Version != 7 {
+		t.Fatalf("version: got %d, want 7", decResp.Version)
+	}
+	if decResp.Variant != "10xx" {
+		t.Fatalf("variant: got %q, want %q", decResp.Variant, "10xx")
+	}
+	if !uuidV7Re.MatchString(decResp.ID) {
+		t.Fatalf("id %q does not match UUIDv7", decResp.ID)
 	}
 }
 
@@ -313,45 +400,5 @@ func TestRoutes_MethodNotAllowed(t *testing.T) {
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusMethodNotAllowed)
-	}
-}
-
-func equalJSON(a, b map[string]any) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, av := range a {
-		bv, ok := b[k]
-		if !ok {
-			return false
-		}
-		if !deepEqual(av, bv) {
-			return false
-		}
-	}
-	return true
-}
-
-func deepEqual(a, b any) bool {
-	switch av := a.(type) {
-	case map[string]any:
-		bv, ok := b.(map[string]any)
-		if !ok {
-			return false
-		}
-		return equalJSON(av, bv)
-	case []any:
-		bv, ok := b.([]any)
-		if !ok || len(av) != len(bv) {
-			return false
-		}
-		for i := range av {
-			if !deepEqual(av[i], bv[i]) {
-				return false
-			}
-		}
-		return true
-	default:
-		return a == b
 	}
 }

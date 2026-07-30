@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/Albe83/id-service/internal/idgen"
 )
@@ -75,13 +76,24 @@ func (s *Server) generateIDs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) decodeID(w http.ResponseWriter, r *http.Request) {
+	raw := r.PathValue("id")
+
+	id, err := idgen.Parse(raw)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	d := idgen.Decode(id)
 	writeJSON(w, http.StatusOK, decodeResponse{
-		ID:            "018f3a2c-9e5b-7000-8000-123456789abc",
-		TimestampMs:   1714667953755,
-		TimestampISO:  "2024-05-02T16:39:13.755Z",
-		Version:       7,
-		Variant:       "10xx",
-		RandomPayload: "00000000123456789abc",
+		ID:            raw,
+		TimestampMs:   d.TimestampMs,
+		TimestampISO:  time.UnixMilli(d.TimestampMs).UTC().Format("2006-01-02T15:04:05.000Z07:00"),
+		Version:       d.Version,
+		Variant:       d.Variant,
+		RandomPayload: d.RandomPayload,
 	})
 }
 

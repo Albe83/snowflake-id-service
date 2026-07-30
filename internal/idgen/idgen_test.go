@@ -139,3 +139,84 @@ func TestNextID_ConcurrencyNoDuplicates(t *testing.T) {
 		t.Fatalf("expected %d unique ids, got %d", expected, len(seen))
 	}
 }
+
+func TestParse_Valid(t *testing.T) {
+	id, err := Parse("018f3a2c-9e5b-7000-8000-123456789abc")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	want := [16]byte{
+		0x01, 0x8f, 0x3a, 0x2c, 0x9e, 0x5b, 0x70, 0x00,
+		0x80, 0x00, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc,
+	}
+	if id != want {
+		t.Fatalf("Parse: got %x, want %x", id, want)
+	}
+}
+
+func TestParse_Invalid(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"too short", "018f3a2c-9e5b-7000-8000-123456789ab"},
+		{"too long", "018f3a2c-9e5b-7000-8000-123456789abcd"},
+		{"missing hyphen", "018f3a2c9e5b-7000-8000-123456789abc"},
+		{"hyphen wrong position", "018f3a2c-9e5b-700-08000-123456789abc"},
+		{"non-hex", "018f3a2c-9e5b-7000-8000-123456789abz"},
+		{"uppercase", "018F3A2C-9E5B-7000-8000-123456789ABC"},
+		{"version 4", "018f3a2c-9e5b-4000-8000-123456789abc"},
+		{"variant 00", "018f3a2c-9e5b-7000-0000-123456789abc"},
+		{"empty", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := Parse(tt.input); err == nil {
+				t.Fatal("expected error, got nil")
+			}
+		})
+	}
+}
+
+func TestDecode_TestVector(t *testing.T) {
+	id := [16]byte{
+		0x01, 0x8f, 0x3a, 0x2c, 0x9e, 0x5b, 0x70, 0x00,
+		0x80, 0x00, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc,
+	}
+	d := Decode(id)
+
+	if d.TimestampMs != 1714667953755 {
+		t.Fatalf("timestamp: got %d, want %d", d.TimestampMs, 1714667953755)
+	}
+	if d.Version != 7 {
+		t.Fatalf("version: got %d, want 7", d.Version)
+	}
+	if d.Variant != "10xx" {
+		t.Fatalf("variant: got %q, want %q", d.Variant, "10xx")
+	}
+	if d.RandomPayload != "00000000123456789abc" {
+		t.Fatalf("random_payload: got %q, want %q", d.RandomPayload, "00000000123456789abc")
+	}
+}
+
+func TestParseDecode_Roundtrip(t *testing.T) {
+	g := NewGenerator(nil)
+	for range 50 {
+		id, err := g.NextID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed, err := Parse(String(id))
+		if err != nil {
+			t.Fatalf("Parse(%s): %v", String(id), err)
+		}
+		if parsed != id {
+			t.Fatalf("roundtrip mismatch: parsed %x, want %x", parsed, id)
+		}
+		d := Decode(parsed)
+		if d.Version != 7 {
+			t.Fatalf("version: got %d, want 7", d.Version)
+		}
+	}
+}
