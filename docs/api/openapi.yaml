@@ -120,18 +120,39 @@ paths:
       operationId: getMetrics
       summary: Prometheus metrics
       description: >
-        Exposes metrics via promhttp.Handler.
-        Supports Prometheus exposition format and OpenMetrics
-        via content negotiation (Accept header).
+        Exposes metrics via `promhttp.Handler()` with its default options.
+        The handler negotiates supported Prometheus exposition formats from
+        the `Accept` header and falls back to the Prometheus text format when
+        the header is absent or unsupported. OpenMetrics is not enabled:
+        requesting `application/openmetrics-text` therefore also falls back
+        to the Prometheus text format. Scrapers may omit `Accept` or send their
+        standard Prometheus scrape header; the protobuf encodings are retained
+        for compatible legacy clients. Clients should parse Content-Type
+        parameters rather than compare the header as an opaque string because
+        client_golang may append compatible parameters such as `escaping`.
       tags: [Observability]
       responses:
         "200":
-          description: Metrics in Prometheus or OpenMetrics format.
+          description: >
+            Metrics in the negotiated Prometheus exposition format. Without a
+            supported `Accept` value, the response Content-Type is
+            `text/plain; version=0.0.4; charset=utf-8`.
           content:
-            text/plain; version=0.0.4:
+            text/plain; version=0.0.4; charset=utf-8:
               schema:
                 type: string
-            application/openmetrics-text; version=1.0.0:
+              example: |
+                # HELP id_service_ids_generated_total Total number of generated IDs.
+                # TYPE id_service_ids_generated_total counter
+                id_service_ids_generated_total 42
+            application/vnd.google.protobuf; proto=io.prometheus.client.MetricFamily; encoding=delimited:
+              schema:
+                type: string
+                format: binary
+            application/vnd.google.protobuf; proto=io.prometheus.client.MetricFamily; encoding=text:
+              schema:
+                type: string
+            application/vnd.google.protobuf; proto=io.prometheus.client.MetricFamily; encoding=compact-text:
               schema:
                 type: string
 
